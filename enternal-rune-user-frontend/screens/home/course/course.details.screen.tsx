@@ -1,5 +1,5 @@
 import { View, Text, ScrollView, Image, TouchableOpacity } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams,useFocusEffect } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import {
   useFonts,
@@ -13,12 +13,15 @@ import {
   Nunito_600SemiBold,
 } from "@expo-google-fonts/nunito";
 import { FontAwesome, Ionicons } from "@expo/vector-icons";
-import { useEffect, useState } from "react";
+import { useEffect, useState,useCallback } from "react";
 import CourseLesson from "@/components/courses/course.lesson";
 import ReviewCard from "@/components/cards/review.card";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import useUser from "@/hooks/auth/useUser";
 import Loader from "@/components/loader/loader";
+import { addToCart, isCourseInCart } from "@/src/database/cart.service";
+
+
 
 export default function CourseDetailScreen() {
   const [activeButton, setActiveButton] = useState("About");
@@ -30,21 +33,24 @@ export default function CourseDetailScreen() {
   const courseData: CoursesType | null = item ? JSON.parse(item as string) : null;
   const [checkPurchased, setCheckPurchased] = useState(false);
 
-  useEffect(() => {
-    if (courseData && user?.courses?.find((i: any) => i._id === courseData._id)) {
-      setCheckPurchased(true);
-    }
-  }, [user, courseData]);
+  useFocusEffect(
+    useCallback(() => {
+      if (courseData && user?.courses?.find((i: any) => i._id === courseData._id)) {
+        setCheckPurchased(true);
+      } else {
+        setCheckPurchased(false); // reset nếu chưa mua
+      }
+    }, [user, courseData])
+  );
 
   const handleAddToCart = async () => {
-    if (!courseData) return;
-    const existingCartData = await AsyncStorage.getItem("cart");
-    const cartData = existingCartData ? JSON.parse(existingCartData) : [];
-    const itemExists = cartData.some((item: any) => item._id === courseData._id);
-    if (!itemExists) {
-      cartData.push(courseData);
-      await AsyncStorage.setItem("cart", JSON.stringify(cartData));
+    if (!courseData || !user?._id) return;
+
+    const exists = await isCourseInCart(courseData._id, user._id);
+    if (!exists) {
+      await addToCart(courseData, user._id);
     }
+
     router.push("/(routes)/cart");
   };
 

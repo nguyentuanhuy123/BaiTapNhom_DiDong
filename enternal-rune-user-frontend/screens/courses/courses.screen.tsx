@@ -105,6 +105,7 @@ export default function CoursesScreen() {
               </TouchableOpacity>
               {categories?.map((i: any, index: number) => (
                 <TouchableOpacity
+                  key={i._id || index}
                   style={{
                     padding: 10,
                     backgroundColor:

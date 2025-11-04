@@ -5,7 +5,10 @@ import {
   TouchableOpacity,
   StyleSheet,
   TextInput,
+  Alert,
+  Linking
 } from "react-native";
+import { Directory, File } from "expo-file-system";
 import React, { useEffect, useState } from "react";
 import Loader from "@/components/loader/loader";
 import { router } from "expo-router";
@@ -20,11 +23,15 @@ import ReviewCard from "@/components/cards/review.card";
 import { FontAwesome } from "@expo/vector-icons";
 import useUser from "@/hooks/auth/useUser";
 
+interface QuizState {
+  [questionIndex: number]: number; // lưu index option đã chọn
+}
+
 export default function CourseAccessScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useUser();
-  const [data, setData] = useState<CoursesType | null>(null);
-  const [courseContentData, setCourseContentData] = useState<CourseDataType[]>([]);
+  const [data, setData] = useState<any | null>(null);
+  const [courseContentData, setCourseContentData] = useState<any[]>([]);
   const [activeVideo, setActiveVideo] = useState(0);
   const [activeButton, setActiveButton] = useState("About");
   const [isExpanded, setIsExpanded] = useState(false);
@@ -32,24 +39,26 @@ export default function CourseAccessScreen() {
   const [rating, setRating] = useState(1);
   const [review, setReview] = useState("");
   const [reviewAvailable, setReviewAvailable] = useState(false);
+  const [quizAnswers, setQuizAnswers] = useState<QuizState>({});
+  const [showQuizResult, setShowQuizResult] = useState(false);
+  const [quizScore, setQuizScore] = useState(0);
+
+  
 
   useEffect(() => {
     const init = async () => {
       try {
-        // Lấy courseData từ AsyncStorage
         const storedCourse = await AsyncStorage.getItem("current_course");
         if (!storedCourse) return;
 
-        const parsedData: CoursesType = JSON.parse(storedCourse);
+        const parsedData = JSON.parse(storedCourse);
         setData(parsedData);
 
-        // Kiểm tra review đã có hay chưa
         const hasReview = parsedData.reviews?.some(
           (r: any) => r.user._id === user?._id
         );
         if (hasReview) setReviewAvailable(true);
 
-        // Fetch nội dung course
         await fetchCourseContent(parsedData._id);
       } catch (error) {
         console.error("Failed to load course data:", error);
@@ -60,6 +69,13 @@ export default function CourseAccessScreen() {
 
     init();
   }, [user]);
+  // Reset quiz khi chuyển video
+  useEffect(() => {
+    setQuizAnswers({});
+    setShowQuizResult(false);
+    setQuizScore(0);
+  }, [activeVideo]);
+
 
   const fetchCourseContent = async (courseId?: string) => {
     if (!courseId && !data) return;
@@ -73,58 +89,53 @@ export default function CourseAccessScreen() {
       router.push("/(routes)/course-details");
     }
   };
-const handleQuestionSubmit = async () => {
-  if (!data || !courseContentData?.[activeVideo]?._id) {
-    console.log("Missing courseId or contentId");
-    return;
-  }
 
-  try {
-    const payload = {
-      question,
-      courseId: data._id,
-      contentId: courseContentData[activeVideo].title,
-      userName: user?.name || "Guest",
-    };
+  const handleQuestionSubmit = async () => {
+    if (!data || !courseContentData?.[activeVideo]?._id) {
+      console.log("Missing courseId or contentId");
+      return;
+    }
 
-    console.log("Submitting question payload:", payload);
+    try {
+      const payload = {
+        question,
+        courseId: data._id,
+        contentId: courseContentData[activeVideo].title,
+        userName: user?.name || "Guest",
+      };
 
-    await axios.put(`${SERVER_URI}/add-question`, payload);
+      await axios.put(`${SERVER_URI}/add-question`, payload);
 
-    setQuestion("");
-    Toast.show("Question created successfully!", { placement: "bottom" });
-    await fetchCourseContent(data._id);
-  } catch (error) {
-    console.log("Failed to submit question:", error);
-  }
-};
+      setQuestion("");
+      Toast.show("Question created successfully!", { placement: "bottom" });
+      await fetchCourseContent(data._id);
+    } catch (error) {
+      console.log("Failed to submit question:", error);
+    }
+  };
 
+  const handleReviewSubmit = async () => {
+    if (!data) return;
 
-const handleReviewSubmit = async () => {
-  if (!data) return;
+    const reviewerName = user?.name || "Guest";
 
-  const reviewerName = user?.name || "Guest";
+    try {
+      await axios.put(`${SERVER_URI}/add-review/${data._id}`, {
+        review,
+        rating,
+        userName: reviewerName,
+      });
 
-  try {
-    await axios.put(`${SERVER_URI}/add-review/${data._id}`, {
-      review,
-      rating,
-      userName: reviewerName,
-    });
-
-    setRating(1);
-    setReview("");
-    router.push({
-      pathname: "/(routes)/course-details",
-      params: { item: JSON.stringify(data) } // hoặc chỉ truyền courseId
-    });
-
-  } catch (error) {
-    console.log(error);
-  }
-};
-
-
+      setRating(1);
+      setReview("");
+      router.push({
+        pathname: "/(routes)/course-details",
+        params: { item: JSON.stringify(data) },
+      });
+    } catch (error) {
+      console.log(error);
+    }
+  };
 
   const renderStars = () => {
     return Array.from({ length: 5 }, (_, i) => (
@@ -137,6 +148,22 @@ const handleReviewSubmit = async () => {
         />
       </TouchableOpacity>
     ));
+  };
+
+  const handleQuizSelect = (questionIndex: number, optionIndex: number) => {
+    setQuizAnswers({ ...quizAnswers, [questionIndex]: optionIndex });
+  };
+
+  const handleQuizSubmit = () => {
+    const quiz = courseContentData[activeVideo]?.quizQuestions || [];
+    let score = 0;
+    quiz.forEach((q: any, index: number) => {
+      if (quizAnswers[index] !== undefined && q.options[quizAnswers[index]].isCorrect) {
+        score += 1;
+      }
+    });
+    setQuizScore(score);
+    setShowQuizResult(true);
   };
 
   if (isLoading || !data) return <Loader />;
@@ -175,19 +202,31 @@ const handleReviewSubmit = async () => {
       </Text>
 
       {/* Tabs */}
-      <View style={{ flexDirection: "row", marginTop: 25, marginHorizontal: 10, backgroundColor: "#E1E9F8", borderRadius: 50, gap: 10 }}>
-        {["About", "Q&A", "Reviews"].map((tab) => (
+      <View style={{
+        flexDirection: "row",
+        marginTop: 25,
+        marginHorizontal: 10,
+        backgroundColor: "#E1E9F8",
+        borderRadius: 50,
+        gap: 10,
+        flexWrap: "wrap"
+      }}>
+        {["About", "Q&A", "Reviews", "Quiz", "Study Materials"].map((tab) => (
           <TouchableOpacity
             key={tab}
             style={{
               paddingVertical: 10,
-              paddingHorizontal: 42,
+              paddingHorizontal: 30,
               backgroundColor: activeButton === tab ? "#2467EC" : "transparent",
               borderRadius: activeButton === tab ? 50 : 0,
+              marginVertical: 5,
             }}
             onPress={() => setActiveButton(tab)}
           >
-            <Text style={{ color: activeButton === tab ? "#fff" : "#000", fontFamily: "Nunito_600SemiBold" }}>
+            <Text style={{
+              color: activeButton === tab ? "#fff" : "#000",
+              fontFamily: "Nunito_600SemiBold"
+            }}>
               {tab}
             </Text>
           </TouchableOpacity>
@@ -225,8 +264,14 @@ const handleReviewSubmit = async () => {
             <Text style={styles.buttonText}>Submit</Text>
           </TouchableOpacity>
 
-          {courseContentData[activeVideo]?.questions?.slice().reverse().map((item, index) => (
-            <QuestionsCard key={index} item={item} fetchCourseContent={() => fetchCourseContent(data._id)} courseData={data} contentId={courseContentData[activeVideo]._id} />
+          {courseContentData[activeVideo]?.questions?.slice().reverse().map((item: CommentType, index: number) => (
+            <QuestionsCard
+              key={index}
+              item={item}
+              fetchCourseContent={() => fetchCourseContent(data._id)}
+              courseData={data}
+              contentId={courseContentData[activeVideo]._id}
+            />
           ))}
         </View>
       )}
@@ -254,11 +299,138 @@ const handleReviewSubmit = async () => {
             </>
           )}
 
-          {data.reviews?.map((item, index) => (
+          {data.reviews?.map((item: ReviewType, index: number) => (
             <ReviewCard key={index} item={item} />
           ))}
+
         </View>
       )}
+
+      {/* Quiz */}
+{activeButton === "Quiz" && (
+  <View style={{ marginHorizontal: 16, marginVertical: 25 }}>
+    <Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 10 }}>
+      Quiz - {courseContentData[activeVideo]?.title}
+    </Text>
+
+    {courseContentData[activeVideo]?.quizQuestions?.map((q: any, index: number) => (
+      <View key={index} style={{ marginBottom: 20, backgroundColor: "#fff", padding: 15, borderRadius: 10 }}>
+        <Text style={{ fontSize: 16, fontWeight: "600" }}>{index + 1}. {q.question}</Text>
+
+        {q.options.map((opt: any, optIndex: number) => (
+          <TouchableOpacity
+            key={optIndex}
+            style={{
+              marginTop: 8,
+              padding: 10,
+              backgroundColor: quizAnswers[index] === optIndex ? "#2467EC" : "#E1E9F8",
+              borderRadius: 8,
+            }}
+            onPress={() => handleQuizSelect(index, optIndex)}
+          >
+            <Text style={{ fontSize: 15, color: quizAnswers[index] === optIndex ? "#fff" : "#000" }}>
+              {opt.text}
+            </Text>
+          </TouchableOpacity>
+        ))}
+
+        {/* Hiển thị Correct/Wrong và Explanation chỉ khi submit */}
+        {showQuizResult && (
+          <>
+            {quizAnswers[index] !== undefined && (
+              <Text style={{ marginTop: 8, fontStyle: "italic", color: quizAnswers[index] === q.options.findIndex((o: any) => o.isCorrect) ? "green" : "red" }}>
+                {quizAnswers[index] === q.options.findIndex((o: any) => o.isCorrect) ? "Correct!" : `Wrong! Correct: ${q.options.find((o: any) => o.isCorrect)?.text}`}
+              </Text>
+            )}
+            {q.explanation && (
+              <Text style={{ marginTop: 8, fontStyle: "italic", color: "#525258" }}>
+                Explanation: {q.explanation}
+              </Text>
+            )}
+          </>
+        )}
+      </View>
+    ))}
+
+    {/* Submit / Reset */}
+    {courseContentData[activeVideo]?.quizQuestions?.length > 0 && !showQuizResult && (
+      <TouchableOpacity style={styles.button} onPress={handleQuizSubmit}>
+        <Text style={styles.buttonText}>Submit Quiz</Text>
+      </TouchableOpacity>
+    )}
+
+    {showQuizResult && (
+      <>
+        <Text style={{ fontSize: 18, fontWeight: "700", textAlign: "center", marginTop: 15 }}>
+          Your score: {quizScore}/{courseContentData[activeVideo]?.quizQuestions?.length}
+        </Text>
+
+        <TouchableOpacity
+          style={[styles.button, { backgroundColor: "#FF6B6B" }]}
+          onPress={() => {
+            setQuizAnswers({});
+            setShowQuizResult(false);
+            setQuizScore(0);
+          }}
+        >
+          <Text style={styles.buttonText}>Reset Quiz</Text>
+        </TouchableOpacity>
+      </>
+    )}
+  </View>
+)}
+    {/* Study Materials */}
+    {activeButton === "Study Materials" && (
+      <View style={{ marginHorizontal: 16, marginVertical: 25 }}>
+        <Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 10 }}>
+          Study Materials - {courseContentData[activeVideo]?.title}
+        </Text>
+
+        {courseContentData[activeVideo]?.studyMaterials?.length > 0 ? (
+          courseContentData[activeVideo].studyMaterials.map((material: any, index: number) => (
+            <TouchableOpacity
+              key={index}
+              style={{
+                marginBottom: 10,
+                padding: 15,
+                backgroundColor: "#E1E9F8",
+                borderRadius: 10,
+              }}
+              onPress={() => {
+                Alert.alert(
+                  "Download Confirmation",
+                  `Do you want to download "${material.title}"?`,
+                  [
+                    { text: "Cancel", style: "cancel" },
+                    {
+                      text: "Download",
+                      onPress: () => {
+                        Linking.openURL(material.content).catch(() =>
+                          Alert.alert("Download failed", "Cannot open the link.")
+                        );
+                      },
+                    },
+                  ]
+                );
+              }}
+            >
+              <Text style={{ fontSize: 16, fontWeight: "600", color: "#2467EC" }}>
+                {material.title}
+              </Text>
+              <Text style={{ fontSize: 14, color: "#525258", marginTop: 5 }}>
+                Tap to download
+              </Text>
+            </TouchableOpacity>
+          ))
+        ) : (
+          <Text>No study materials available for this lesson.</Text>
+        )}
+      </View>
+    )}
+
+
+
+
     </ScrollView>
   );
 }

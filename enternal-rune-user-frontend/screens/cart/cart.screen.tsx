@@ -1,12 +1,12 @@
 import useUser from "@/hooks/auth/useUser";
 import { SERVER_URI } from "@/utils/uri";
 import { Entypo, FontAwesome } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useStripe } from "@stripe/stripe-react-native";
 import axios from "axios";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   View,
   Text,
@@ -16,145 +16,160 @@ import {
   RefreshControl,
 } from "react-native";
 
+// ✅ Import SQLite functions
+import {
+  getCart,
+  removeFromCart,
+  clearCart,
+} from "@/src/database/cart.service";
+
 export default function CartScreen() {
-  const { user, loading, setRefetch } = useUser();
+  const { user, setRefetch } = useUser();
   const [cartItems, setCartItems] = useState<CoursesType[]>([]);
   const [refreshing, setRefreshing] = useState(false);
   const [orderSuccess, setOrderSuccess] = useState(false);
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
+  // ✅ Lấy giỏ hàng từ SQLite khi mở màn hình
   useEffect(() => {
-    const subscription = async () => {
-      const cart: any = await AsyncStorage.getItem("cart");
-      setCartItems(JSON.parse(cart));
-    };
-    subscription();
-  }, []);
+    if (!user?._id) return;
+    fetchCart();
+  }, [user]);
+
+  const fetchCart = async () => {
+    if (!user?._id) return;
+    const items = (await getCart(user._id)) as CoursesType[];
+    setCartItems(items);
+  };
+
 
   const onRefresh = async () => {
     setRefreshing(true);
-    const cart: any = await AsyncStorage.getItem("cart");
-    setCartItems(cart);
+    await fetchCart();
     setRefreshing(false);
   };
 
   const calculateTotalPrice = () => {
-    const totalPrice = cartItems.reduce((total, item) => total + item.price, 0);
-    return totalPrice.toFixed(2);
+    const total = cartItems.reduce((sum, item) => sum + (item.price || 0), 0);
+    return total.toFixed(2);
   };
 
-  const handleCourseDetails = (courseDetails: any) => {
+  const handleCourseDetails = (courseItem: CoursesType) => {
     router.push({
       pathname: "/(routes)/course-details",
-      params: { item: JSON.stringify(courseDetails) },
+      params: { item: JSON.stringify(courseItem) },
     });
   };
 
+
+
   const handleRemoveItem = async (item: any) => {
-    const existingCartData = await AsyncStorage.getItem("cart");
-    const cartData = existingCartData ? JSON.parse(existingCartData) : [];
-    const updatedCartData = cartData.filter((i: any) => i._id !== item._id);
-    await AsyncStorage.setItem("cart", JSON.stringify(updatedCartData));
-    setCartItems(updatedCartData);
+    if (!user?._id) return;
+    await removeFromCart(item._id, user._id);
+    await fetchCart();
   };
 
   const handlePayment = async () => {
-  try {
-    const amount = Math.round(
-      cartItems.reduce((total, item) => total + item.price, 0) * 100
-    );
-    const paymentIntentResponse = await axios.post(`${SERVER_URI}/payment`, {
-      amount,
-    });
+    try {
+      const amount = Math.round(
+        cartItems.reduce((total, item) => total + item.price, 0) * 100
+      );
 
-    const { client_secret: clientSecret } = paymentIntentResponse.data;
-    const initSheetResponse = await initPaymentSheet({
-      merchantDisplayName: "ELearning",
-      paymentIntentClientSecret: clientSecret,
-    });
+      const paymentIntentResponse = await axios.post(`${SERVER_URI}/payment`, {
+        amount,
+      });
 
-    if (initSheetResponse.error) {
-      console.error(initSheetResponse.error);
-      return;
+      const { client_secret: clientSecret } = paymentIntentResponse.data;
+      const initSheetResponse = await initPaymentSheet({
+        merchantDisplayName: "ELearning",
+        paymentIntentClientSecret: clientSecret,
+      });
+
+      if (initSheetResponse.error) {
+        console.error(initSheetResponse.error);
+        return;
+      }
+
+      const paymentResponse = await presentPaymentSheet();
+      if (paymentResponse.error) {
+        console.error(paymentResponse.error);
+      } else {
+        await createOrder(paymentResponse);
+      }
+    } catch (error) {
+      console.error("Payment error:", error);
     }
-    const paymentResponse = await presentPaymentSheet();
+  };
 
-    if (paymentResponse.error) {
-      console.error(paymentResponse.error);
-    } else {
-      await createOrder(paymentResponse);
+  const createOrder = async (paymentResponse: any) => {
+    try {
+      if (!user?._id) return;
+      await axios.post(`${SERVER_URI}/create-mobile-order`, {
+        userId: user._id,
+        courseId: cartItems[0]._id,
+        payment_info: paymentResponse,
+      });
+
+      setOrderSuccess(true);
+      await clearCart(user._id);
+      setCartItems([]);
+
+      const res = await axios.get(`${SERVER_URI}/user/${user._id}`);
+      const updatedUser = res.data.user;
+      await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
+      setRefetch((prev) => !prev);
+    } catch (error: any) {
+      console.error("Order creation failed:", error.response?.data || error.message);
     }
-  } catch (error) {
-    console.error("Payment error:", error);
-  }
-};
-const createOrder = async (paymentResponse: any) => {
-  try {
-    if (!user?._id) {
-      console.error("No user found");
-      return;
-    }
-
-    await axios.post(`${SERVER_URI}/create-mobile-order`, {
-      userId: user._id,
-      courseId: cartItems[0]._id,
-      payment_info: paymentResponse,
-    });
-
-    setOrderSuccess(true);
-    await AsyncStorage.removeItem("cart");
-    const res = await axios.get(`${SERVER_URI}/user/${user._id}`);
-    const updatedUser = res.data.user;
-    await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
-    setRefetch((prev) => !prev);
-  } catch (error: any) {
-    console.error("Order creation failed:", error.response?.data || error.message);
-  }
-};
-
-
-
-
+  };
 
   return (
-    <LinearGradient
-      colors={["#E5ECF9", "#F6F7F9"]}
-      style={{ flex: 1, backgroundColor: "white" }}
-    >
+    <LinearGradient colors={["#E5ECF9", "#F6F7F9"]} style={{ flex: 1 }}>
       {orderSuccess ? (
-        <View
-          style={{ flex: 1, justifyContent: "center", alignItems: "center" }}
-        >
+        <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
           <Image
             source={require("@/assets/images/account_confirmation.png")}
-            style={{
-              width: 200,
-              height: 200,
-              resizeMode: "contain",
-              marginBottom: 20,
-            }}
+            style={{ width: 200, height: 200, marginBottom: 20 }}
           />
-          <View style={{ alignItems: "center", marginBottom: 20 }}>
-            <Text style={{ fontSize: 22, fontFamily: "Raleway_700Bold" }}>
-              Payment Successful!
-            </Text>
-            <Text
-              style={{
-                fontSize: 15,
-                marginTop: 5,
-                color: "#575757",
-                fontFamily: "Nunito_400Regular",
-              }}
-            >
-              Thank you for your purchase!
-            </Text>
-          </View>
+          <Text style={{ fontSize: 22, fontFamily: "Raleway_700Bold" }}>
+            Payment Successful!
+          </Text>
+          <Text
+            style={{
+              fontSize: 15,
+              marginTop: 5,
+              color: "#575757",
+              fontFamily: "Nunito_400Regular",
+            }}
+          >
+            Thank you for your purchase!
+          </Text>
         </View>
       ) : (
         <>
           <FlatList
             data={cartItems}
             keyExtractor={(item) => item._id.toString()}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            }
+            ListEmptyComponent={() => (
+              <View style={{ alignItems: "center", marginTop: 50 }}>
+                <Image
+                  source={require("@/assets/empty_cart.png")}
+                  style={{ width: 200, height: 200 }}
+                />
+                <Text
+                  style={{
+                    fontSize: 20,
+                    fontFamily: "Raleway_600SemiBold",
+                    marginTop: 15,
+                  }}
+                >
+                  Your Cart is Empty!
+                </Text>
+              </View>
+            )}
             renderItem={({ item }) => (
               <TouchableOpacity
                 style={{
@@ -167,15 +182,11 @@ const createOrder = async (paymentResponse: any) => {
               >
                 <TouchableOpacity onPress={() => handleCourseDetails(item)}>
                   <Image
-                    source={{ uri: item.thumbnail.url! }}
-                    style={{
-                      width: 100,
-                      height: 100,
-                      marginRight: 16,
-                      borderRadius: 8,
-                    }}
+                    source={{ uri: item.thumbnail.url }}
+                    style={{ width: 100, height: 100, borderRadius: 8 }}
                   />
                 </TouchableOpacity>
+
                 <View style={{ flex: 1, justifyContent: "space-between" }}>
                   <TouchableOpacity onPress={() => handleCourseDetails(item)}>
                     <Text
@@ -185,63 +196,38 @@ const createOrder = async (paymentResponse: any) => {
                         fontFamily: "Nunito_700Bold",
                       }}
                     >
-                      {item?.name}
+                      {item.name}
                     </Text>
                   </TouchableOpacity>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "space-between",
-                    }}
-                  >
-                    <View
+
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    <Entypo name="dot-single" size={24} color={"gray"} />
+                    <Text
                       style={{
-                        flexDirection: "row",
-                        justifyContent: "space-between",
+                        fontSize: 16,
+                        color: "#808080",
+                        fontFamily: "Nunito_400Regular",
                       }}
                     >
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          marginRight: 16,
-                        }}
-                      >
-                        <Entypo name="dot-single" size={24} color={"gray"} />
-                        <Text
-                          style={{
-                            fontSize: 16,
-                            color: "#808080",
-                            fontFamily: "Nunito_400Regular",
-                          }}
-                        >
-                          {item.level}
-                        </Text>
-                      </View>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          marginRight: 16,
-                        }}
-                      >
-                        <FontAwesome
-                          name="dollar"
-                          size={14}
-                          color={"#808080"}
-                        />
-                        <Text
-                          style={{
-                            marginLeft: 3,
-                            fontSize: 16,
-                            color: "#808080",
-                          }}
-                        >
-                          {item.price}
-                        </Text>
-                      </View>
-                    </View>
+                      {item.level}
+                    </Text>
+                    <FontAwesome
+                      name="dollar"
+                      size={14}
+                      color={"#808080"}
+                      style={{ marginLeft: 10 }}
+                    />
+                    <Text
+                      style={{
+                        marginLeft: 3,
+                        fontSize: 16,
+                        color: "#808080",
+                      }}
+                    >
+                      {item.price}
+                    </Text>
                   </View>
+
                   <TouchableOpacity
                     style={{
                       backgroundColor: "#FF6347",
@@ -249,14 +235,12 @@ const createOrder = async (paymentResponse: any) => {
                       padding: 5,
                       marginTop: 10,
                       width: 100,
-                      alignSelf: "flex-start",
                     }}
                     onPress={() => handleRemoveItem(item)}
                   >
                     <Text
                       style={{
                         color: "white",
-                        fontSize: 16,
                         textAlign: "center",
                         fontFamily: "Nunito_600SemiBold",
                       }}
@@ -267,75 +251,44 @@ const createOrder = async (paymentResponse: any) => {
                 </View>
               </TouchableOpacity>
             )}
-            ListEmptyComponent={() => (
-              <View
+          />
+
+          {cartItems.length > 0 && (
+            <View style={{ marginBottom: 25 }}>
+              <Text
                 style={{
-                  flex: 1,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  padding: 20,
+                  fontSize: 18,
+                  textAlign: "center",
+                  marginTop: 20,
+                  fontFamily: "Nunito_700Bold",
                 }}
               >
-                <Image
-                  source={require("@/assets/empty_cart.png")}
-                  style={{ width: 200, height: 200, resizeMode: "contain" }}
-                />
+                Total Price: ${calculateTotalPrice()}
+              </Text>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#007BFF",
+                  borderRadius: 5,
+                  padding: 10,
+                  marginTop: 20,
+                  width: "80%",
+                  alignSelf: "center",
+                }}
+                onPress={handlePayment}
+              >
                 <Text
                   style={{
-                    fontSize: 24,
-                    marginTop: 20,
-                    color: "#333",
-                    fontFamily: "Raleway_600SemiBold",
-                  }}
-                >
-                  Your Cart is Empty!
-                </Text>
-              </View>
-            )}
-            refreshControl={
-              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-            }
-          />
-          <View style={{ marginBottom: 25 }}>
-            {cartItems?.length === 0 ||
-              (cartItems?.length > 0 && (
-                <Text
-                  style={{
+                    color: "white",
                     fontSize: 18,
                     textAlign: "center",
-                    marginTop: 20,
-                    fontFamily: "Nunito_700Bold",
+                    fontFamily: "Nunito_600SemiBold",
                   }}
                 >
-                  Total Price: ${calculateTotalPrice()}
+                  Go for payment
                 </Text>
-              ))}
-            {cartItems?.length === 0 ||
-              (cartItems?.length > 0 && (
-                <TouchableOpacity
-                  style={{
-                    backgroundColor: "#007BFF",
-                    borderRadius: 5,
-                    padding: 10,
-                    marginTop: 20,
-                    width: "80%",
-                    alignSelf: "center",
-                  }}
-                  onPress={() => handlePayment()}
-                >
-                  <Text
-                    style={{
-                      color: "white",
-                      fontSize: 18,
-                      textAlign: "center",
-                      fontFamily: "Nunito_600SemiBold",
-                    }}
-                  >
-                    Go for payment
-                  </Text>
-                </TouchableOpacity>
-              ))}
-          </View>
+              </TouchableOpacity>
+            </View>
+          )}
         </>
       )}
     </LinearGradient>

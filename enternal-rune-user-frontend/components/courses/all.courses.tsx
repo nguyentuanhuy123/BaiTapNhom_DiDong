@@ -14,8 +14,8 @@ import {
   Nunito_600SemiBold,
   Nunito_500Medium,
 } from "@expo-google-fonts/nunito";
-import { router } from "expo-router";
-import { useEffect, useRef, useState } from "react";
+import { router ,useFocusEffect} from "expo-router";
+import { useEffect, useRef, useState,useCallback } from "react";
 import axios from "axios";
 import { SERVER_URI } from "@/utils/uri";
 import CourseCard from "@/components/cards/course.card";
@@ -25,16 +25,14 @@ export default function AllCourses() {
   const [loading, setLoading] = useState(true);
   const flatListRef = useRef(null);
 
-  useEffect(() => {
-    axios
-      .get(`${SERVER_URI}/get-courses`)
-      .then((res: any) => {
-        setCourses(res.data.courses);
-      })
-      .catch((error) => {
-        console.log(error);
-      });
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      axios
+        .get(`${SERVER_URI}/get-courses`)
+        .then((res: any) => setCourses(res.data.courses))
+        .catch((err) => console.log(err));
+    }, [])
+  );
 
   let [fontsLoaded, fontError] = useFonts({
     Raleway_700Bold,
