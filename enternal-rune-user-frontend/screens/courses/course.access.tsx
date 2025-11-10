@@ -9,9 +9,9 @@ import {
   Linking
 } from "react-native";
 import { Directory, File } from "expo-file-system";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState,useCallback } from "react";
 import Loader from "@/components/loader/loader";
-import { router } from "expo-router";
+import { router ,useFocusEffect} from "expo-router";
 import axios from "axios";
 import { SERVER_URI } from "@/utils/uri";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -22,12 +22,18 @@ import { Toast } from "react-native-toast-notifications";
 import ReviewCard from "@/components/cards/review.card";
 import { FontAwesome } from "@expo/vector-icons";
 import useUser from "@/hooks/auth/useUser";
+import { getQuizResult } from "@/src/database/courseProgress";
+
 
 interface QuizState {
   [questionIndex: number]: number; // lưu index option đã chọn
 }
 
 export default function CourseAccessScreen() {
+  
+  const [quizResult, setQuizResult] = useState<any | null>(null);
+  const [quizResultsByContent, setQuizResultsByContent] = useState<{ [contentId: string]: any }>({});
+
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useUser();
   const [data, setData] = useState<any | null>(null);
@@ -69,12 +75,33 @@ export default function CourseAccessScreen() {
 
     init();
   }, [user]);
-  // Reset quiz khi chuyển video
-  useEffect(() => {
-    setQuizAnswers({});
-    setShowQuizResult(false);
-    setQuizScore(0);
-  }, [activeVideo]);
+
+useFocusEffect(
+  useCallback(() => {
+    const fetchQuizResult = async () => {
+      if (!user?._id || !courseContentData[activeVideo]) return;
+
+      const contentId = courseContentData[activeVideo].title.toString();
+
+      try {
+        const result = await getQuizResult(user._id, contentId);
+        setQuizResultsByContent(prev => ({
+          ...prev,
+          [contentId]: result || null
+        }));
+        console.log("🔄 Refreshed quiz result for content:", contentId, result);
+      } catch (error) {
+        console.error("Failed to refresh quiz result:", error);
+      }
+    };
+
+    fetchQuizResult();
+  }, [activeVideo, user, courseContentData])
+);
+
+
+
+
 
 
   const fetchCourseContent = async (courseId?: string) => {
@@ -165,6 +192,9 @@ export default function CourseAccessScreen() {
     setQuizScore(score);
     setShowQuizResult(true);
   };
+
+  const contentId = courseContentData[activeVideo]?.title;
+  const currentQuizResult = quizResultsByContent[contentId];
 
   if (isLoading || !data) return <Loader />;
 
@@ -306,74 +336,79 @@ export default function CourseAccessScreen() {
         </View>
       )}
 
-      {/* Quiz */}
+      {/* Quiz Tab */}
 {activeButton === "Quiz" && (
   <View style={{ marginHorizontal: 16, marginVertical: 25 }}>
     <Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 10 }}>
       Quiz - {courseContentData[activeVideo]?.title}
     </Text>
 
-    {courseContentData[activeVideo]?.quizQuestions?.map((q: any, index: number) => (
-      <View key={index} style={{ marginBottom: 20, backgroundColor: "#fff", padding: 15, borderRadius: 10 }}>
-        <Text style={{ fontSize: 16, fontWeight: "600" }}>{index + 1}. {q.question}</Text>
-
-        {q.options.map((opt: any, optIndex: number) => (
-          <TouchableOpacity
-            key={optIndex}
-            style={{
-              marginTop: 8,
-              padding: 10,
-              backgroundColor: quizAnswers[index] === optIndex ? "#2467EC" : "#E1E9F8",
-              borderRadius: 8,
-            }}
-            onPress={() => handleQuizSelect(index, optIndex)}
-          >
-            <Text style={{ fontSize: 15, color: quizAnswers[index] === optIndex ? "#fff" : "#000" }}>
-              {opt.text}
-            </Text>
-          </TouchableOpacity>
-        ))}
-
-        {/* Hiển thị Correct/Wrong và Explanation chỉ khi submit */}
-        {showQuizResult && (
-          <>
-            {quizAnswers[index] !== undefined && (
-              <Text style={{ marginTop: 8, fontStyle: "italic", color: quizAnswers[index] === q.options.findIndex((o: any) => o.isCorrect) ? "green" : "red" }}>
-                {quizAnswers[index] === q.options.findIndex((o: any) => o.isCorrect) ? "Correct!" : `Wrong! Correct: ${q.options.find((o: any) => o.isCorrect)?.text}`}
-              </Text>
-            )}
-            {q.explanation && (
-              <Text style={{ marginTop: 8, fontStyle: "italic", color: "#525258" }}>
-                Explanation: {q.explanation}
-              </Text>
-            )}
-          </>
-        )}
-      </View>
-    ))}
-
-    {/* Submit / Reset */}
-    {courseContentData[activeVideo]?.quizQuestions?.length > 0 && !showQuizResult && (
-      <TouchableOpacity style={styles.button} onPress={handleQuizSubmit}>
-        <Text style={styles.buttonText}>Submit Quiz</Text>
-      </TouchableOpacity>
-    )}
-
-    {showQuizResult && (
-      <>
-        <Text style={{ fontSize: 18, fontWeight: "700", textAlign: "center", marginTop: 15 }}>
-          Your score: {quizScore}/{courseContentData[activeVideo]?.quizQuestions?.length}
+    {currentQuizResult ? (
+      <View
+        style={{
+          backgroundColor: "#E1E9F8",
+          padding: 15,
+          borderRadius: 10,
+          marginBottom: 20,
+        }}
+      >
+        <Text style={{ fontSize: 16, fontWeight: "600", marginBottom: 10 }}>
+          You’ve already completed this quiz.
         </Text>
-
+        <Text style={{ fontSize: 16 }}>
+          ✅ Score: {currentQuizResult.score}/{currentQuizResult.total}
+        </Text>
         <TouchableOpacity
-          style={[styles.button, { backgroundColor: "#FF6B6B" }]}
+          style={[styles.button, { marginTop: 15, backgroundColor: "#FF8D07" }]}
           onPress={() => {
-            setQuizAnswers({});
-            setShowQuizResult(false);
-            setQuizScore(0);
+            Alert.alert(
+              "Retake Quiz?",
+              "Your previous score will be replaced.",
+              [
+                { text: "Cancel", style: "cancel" },
+                {
+                  text: "Retake",
+                  onPress: () => {
+                    router.push({
+                      pathname: "../course-quiz",
+                      params: {
+                        courseId: data._id,
+                        contentId: contentId, // dùng title
+                        quizQuestions: JSON.stringify(
+                          courseContentData[activeVideo].quizQuestions
+                        ),
+                      },
+                    });
+                  },
+                },
+              ]
+            );
           }}
         >
-          <Text style={styles.buttonText}>Reset Quiz</Text>
+          <Text style={styles.buttonText}>Retake Quiz</Text>
+        </TouchableOpacity>
+      </View>
+    ) : (
+      <>
+        <Text style={{ fontSize: 16, marginBottom: 15 }}>
+          You haven’t taken this quiz yet.
+        </Text>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() =>
+            router.push({
+              pathname: "../course-quiz",
+              params: {
+                courseId: data._id,
+                contentId: contentId, // dùng title
+                quizQuestions: JSON.stringify(
+                  courseContentData[activeVideo].quizQuestions
+                ),
+              },
+            })
+          }
+        >
+          <Text style={styles.buttonText}>Take Quiz</Text>
         </TouchableOpacity>
       </>
     )}
