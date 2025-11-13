@@ -1,3 +1,5 @@
+
+// ===== Comment / Q&A =====
 type CommentType = {
   _id: string;
   user: User;
@@ -5,6 +7,7 @@ type CommentType = {
   questionReplies: CommentType[];
 };
 
+// ===== Review =====
 type ReviewType = {
   user: User;
   rating?: number;
@@ -12,11 +15,31 @@ type ReviewType = {
   commentReplies?: ReviewType[];
 };
 
+// ===== Links =====
 type LinkType = {
   title: string;
   url: string;
 };
 
+// ===== Quiz =====
+type QuizOptionType = {
+  text: string;
+  isCorrect: boolean;
+};
+
+type QuizQuestionType = {
+  question: string;
+  options: QuizOptionType[];
+  explanation?: string;
+};
+
+// ===== Study Materials =====
+type StudyMaterialType = {
+  title: string;
+  content: string; // text hoặc URL file
+};
+
+// ===== Course Data (Lesson / Video) =====
 type CourseDataType = {
   _id: string | any;
   title: string;
@@ -29,8 +52,11 @@ type CourseDataType = {
   links: LinkType[];
   suggestion: string;
   questions: CommentType[];
+  quizQuestions?: QuizQuestionType[]; // ✅ thêm quiz
+  studyMaterials?: StudyMaterialType[]; // ✅ thêm study materials
 };
 
+// ===== Benefit / Prerequisite =====
 type BenefitType = {
   title: string;
 };
@@ -39,6 +65,7 @@ type PrerequisiteType = {
   title: string;
 };
 
+// ===== Course =====
 type CoursesType = {
   _id: any;
   name: string;
@@ -60,3 +87,6 @@ type CoursesType = {
   ratings?: number;
   purchased: number;
 };
+
+// ===== Course + Progress =====
+type CoursesTypeWithProgress = CoursesType & { progress?: number };

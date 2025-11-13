@@ -19,19 +19,31 @@ import {
   Nunito_600SemiBold,
   Nunito_700Bold,
 } from "@expo-google-fonts/nunito";
-import { useState } from "react";
+import { useState,useEffect,useCallback } from "react";
 import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
 import { SERVER_URI } from "@/utils/uri";
-import { router } from "expo-router";
+import { router,useFocusEffect } from "expo-router";
 import mime from "mime";
 
 export default function ProfileScreen() {
-  const { user, loading, setRefetch } = useUser();
+  const { user, loading, setRefetch ,refetch} = useUser();
   const [image, setImage] = useState<any>(null);
   const [loader, setLoader] = useState(false);
+  const [name, setName] = useState<string>("");
+  useFocusEffect(
+  useCallback(() => {
+    const loadUser = async () => {
+      const userStr = await AsyncStorage.getItem("user");
+      if (userStr) setName(JSON.parse(userStr).name);
+    };
+    loadUser();
+  }, [])
+);
+
+
 
   let [fontsLoaded, fontError] = useFonts({
     Raleway_600SemiBold,
@@ -90,6 +102,7 @@ const pickImage = async () => {
       
       if (response.data.success) {
         Toast.show(response.data.message, { type: "success" });
+        
         setRefetch(true);
         await AsyncStorage.setItem("user", JSON.stringify(response.data.user));
       }
@@ -150,7 +163,7 @@ const pickImage = async () => {
                 fontWeight: "600",
               }}
             >
-              {user?.name}
+              {name}
             </Text>
             <View style={{ marginHorizontal: 16, marginTop: 30 }}>
               <Text
@@ -163,57 +176,62 @@ const pickImage = async () => {
                 Account Details
               </Text>
               <TouchableOpacity
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  marginBottom: 20,
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    columnGap: 30,
-                  }}
-                >
-                  <View
-                    style={{
-                      borderWidth: 2,
-                      borderColor: "#dde2ec",
-                      padding: 15,
-                      borderRadius: 100,
-                      width: 55,
-                      height: 55,
-                    }}
-                  >
-                    <FontAwesome
-                      style={{ alignSelf: "center" }}
-                      name="user-o"
-                      size={20}
-                      color={"black"}
-                    />
-                  </View>
-                  <View>
-                    <Text
-                      style={{ fontSize: 16, fontFamily: "Nunito_700Bold" }}
-                    >
-                      Detail Profile
-                    </Text>
-                    <Text
-                      style={{
-                        color: "#575757",
-                        fontFamily: "Nunito_400Regular",
-                      }}
-                    >
-                      Information Account
-                    </Text>
-                  </View>
-                </View>
-                <TouchableOpacity>
-                  <AntDesign name="right" size={26} color={"#CBD5E0"} />
-                </TouchableOpacity>
-              </TouchableOpacity>
+  style={{
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 20,
+  }}
+  onPress={() =>
+    router.push({
+      pathname: "/(routes)/profile-details",
+      params: { userId: user?._id },
+    })
+  }
+>
+  <View
+    style={{
+      flexDirection: "row",
+      alignItems: "center",
+      columnGap: 30,
+    }}
+  >
+    <View
+      style={{
+        borderWidth: 2,
+        borderColor: "#dde2ec",
+        padding: 15,
+        borderRadius: 100,
+        width: 55,
+        height: 55,
+      }}
+    >
+      <FontAwesome
+        style={{ alignSelf: "center" }}
+        name="user-o"
+        size={20}
+        color={"black"}
+      />
+    </View>
+    <View>
+      <Text
+        style={{ fontSize: 16, fontFamily: "Nunito_700Bold" }}
+      >
+        Detail Profile
+      </Text>
+      <Text
+        style={{
+          color: "#575757",
+          fontFamily: "Nunito_400Regular",
+        }}
+      >
+        Information Account
+      </Text>
+    </View>
+  </View>
+  <AntDesign name="right" size={26} color={"#CBD5E0"} />
+</TouchableOpacity>
+
               <TouchableOpacity
                 style={{
                   flexDirection: "row",

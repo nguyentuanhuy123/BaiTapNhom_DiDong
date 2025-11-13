@@ -107,6 +107,12 @@ export const updateUserInfo = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     const { userId, name } = req.body as IUpdateUserInfo;
 
+    console.log("updateUserInfo called:", req.body); // debug
+
+    if (!userId) {
+      return next(new ErrorHandler("User ID is required", 400));
+    }
+
     const user = await userModel.findById(userId);
     if (!user) return next(new ErrorHandler("User not found", 404));
 
@@ -115,7 +121,11 @@ export const updateUserInfo = CatchAsyncError(
     await user.save();
     await redis.set(userId, JSON.stringify(user));
 
-    res.status(201).json({ success: true, user });
+    res.status(200).json({
+      success: true,
+      message: "Profile updated successfully!",
+      user,
+    });
   }
 );
 

@@ -66,3 +66,4 @@ export async function getQuizResult(userId: string, contentId: string) {
     ? { ...result, answers: JSON.parse(result.answers) }
     : null;
 }
+

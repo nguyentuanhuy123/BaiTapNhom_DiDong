@@ -26,5 +26,5 @@ export default function useUser() {
     fetchUserFromStorage();
   }, [refetch]);
 
-  return { loading, user, error, setRefetch, refetch };
+  return { loading, user, error, setRefetch, refetch,setUser };
 }
