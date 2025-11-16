@@ -1,20 +1,19 @@
 import React, { useState } from "react";
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from "react-native";
 import axios from "axios";
-import { router } from "expo-router";
-import { SERVER_URI } from "@/utils/uri"; // ví dụ: http://localhost:8000/api/v1
+import { router, useLocalSearchParams } from "expo-router";
+import { SERVER_URI } from "@/utils/uri";
 
-export default function ForgotPasswordScreen() {
-  const [email, setEmail] = useState("");
+export default function ResetPasswordScreen() {
+  const { userId } = useLocalSearchParams(); // lấy từ params
+  const [newPassword, setNewPassword] = useState("");
   const [error, setError] = useState("");
 
-  const handleSubmit = async () => {
+  const handleReset = async () => {
     try {
-      const res = await axios.post(`${SERVER_URI}/forgot-password`, { email });
-      const { userId } = res.data;
-
-      // chuyển sang ResetPassword và gửi userId
-      router.push({ pathname: "/reset-password", params: { userId } });
+      await axios.put(`${SERVER_URI}/reset-password`, { userId, newPassword });
+      alert("Password reset successfully!");
+      router.push("/login"); 
     } catch (err: any) {
       setError(err.response?.data?.message || "Something went wrong");
     }
@@ -22,17 +21,17 @@ export default function ForgotPasswordScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Forgot Password</Text>
+      <Text style={styles.header}>Reset Password</Text>
       <TextInput
         style={styles.input}
-        placeholder="Enter your email"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
+        placeholder="Enter new password"
+        secureTextEntry
+        value={newPassword}
+        onChangeText={setNewPassword}
       />
       {error ? <Text style={styles.error}>{error}</Text> : null}
-      <TouchableOpacity style={styles.button} onPress={handleSubmit}>
-        <Text style={styles.buttonText}>Next</Text>
+      <TouchableOpacity style={styles.button} onPress={handleReset}>
+        <Text style={styles.buttonText}>Reset</Text>
       </TouchableOpacity>
     </View>
   );

@@ -7,6 +7,7 @@ import userRouter from "./routes/user.route";
 import courseRouter from "./routes/course.route";
 import orderRouter from "./routes/order.route";
 import layoutRouter from "./routes/layout.route";
+import authRouter from "./routes/auth.route";
 import { rateLimit } from "express-rate-limit";
 
 // body parser
@@ -25,13 +26,14 @@ const limiter = rateLimit({
   standardHeaders: "draft-7",
   legacyHeaders: false,
 });
-
+// middleware calls
+app.use(limiter);
 // routes
 app.use("/api/v1", userRouter);
 app.use("/api/v1", orderRouter);
 app.use("/api/v1", courseRouter);
 app.use("/api/v1", layoutRouter);
-
+app.use("/api/v1/auth", authRouter);
 
 // testing api
 app.get("/test", (req: Request, res: Response, next: NextFunction) => {
@@ -48,5 +50,4 @@ app.all("*", (req: Request, res: Response, next: NextFunction) => {
   next(err);
 });
 
-// middleware calls
-app.use(limiter);
+

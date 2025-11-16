@@ -35,7 +35,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string, {
 })();
 
 // create server
-server.listen(process.env.PORT, () => {
-    console.log(`Server is connected with port ${process.env.PORT}`);
-    connectDB();
+server.listen(process.env.PORT, "0.0.0.0", () => {
+  console.log(`Server is connected with port ${process.env.PORT}`);
+  connectDB();
 });

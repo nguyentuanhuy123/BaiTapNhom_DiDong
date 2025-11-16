@@ -5,8 +5,10 @@ import {
   updatePassword,
   updateProfilePicture,
   updateUserInfo,
-  getUserById
+  getUserById,
+  checkEmailExists, resetPassword 
 } from "../controllers/user.controller";
+
 import { authorizeRoles, isAutheticated } from "../middleware/auth";
 const userRouter = express.Router();
 
@@ -19,5 +21,9 @@ userRouter.put("/update-user-password", updatePassword);
 
 userRouter.put("/update-user-avatar", updateProfilePicture);
 userRouter.get("/user/:id", getUserById);
+// forgot password
+userRouter.post("/forgot-password", checkEmailExists);
 
+// reset password
+userRouter.put("/reset-password", resetPassword);
 export default userRouter;

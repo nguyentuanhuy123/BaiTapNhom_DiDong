@@ -11,8 +11,35 @@ import {
   Modal,
   TextInput,
   StyleSheet,
+  Platform,
 } from "react-native";
-import { widthPercentageToDP } from "react-native-responsive-screen";
+import { widthPercentageToDP as wp } from "react-native-responsive-screen";
+
+// Giả định kiểu dữ liệu
+interface CommentType {
+  _id: string;
+  question: string;
+  user: {
+    name: string;
+    avatar?: { url: string };
+  };
+  questionReplies: ReplyType[];
+}
+
+interface ReplyType {
+  _id: string;
+  answer: string;
+  user: {
+    name: string;
+    avatar?: { url: string };
+  };
+}
+
+interface CoursesType {
+  _id: string;
+}
+
+// Giả định font đã được load ở cấp độ cao hơn (để tránh lặp lại useFonts)
 
 export default function QuestionsCard({
   item,
@@ -28,13 +55,16 @@ export default function QuestionsCard({
   const [open, setOpen] = useState(false);
   const [reply, setReply] = useState("");
   const [showReplies, setshowReplies] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleReplySubmit = async () => {
+    if (reply.trim() === "") return;
+    setIsSubmitting(true);
     const accessToken = await AsyncStorage.getItem("access_token");
     const refreshToken = await AsyncStorage.getItem("refresh_token");
 
-    await axios
-      .put(
+    try {
+      await axios.put(
         `${SERVER_URI}/add-answer`,
         {
           answer: reply,
@@ -48,185 +78,257 @@ export default function QuestionsCard({
             "refresh-token": refreshToken,
           },
         }
-      )
-      .then((res) => {
-        console.log(res.data);
-        setReply("");
-        setOpen(!open);
-        fetchCourseContent();
-      })
-      .catch((error) => {
-        console.log(error);
-      });
+      );
+      setReply("");
+      setOpen(false);
+      fetchCourseContent();
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  return (
-    <>
-      <View style={{ flexDirection: "row", paddingVertical: 10 }}>
+  // --- HÀM RENDER RIÊNG CHO MỘT BÌNH LUẬN/TRẢ LỜI ---
+  const renderComment = (
+    comment: CommentType | ReplyType,
+    isReply: boolean = false
+  ) => {
+    const containerStyle = isReply ? styles.replyContainer : styles.commentContainer;
+    const textContent = (comment as CommentType).question || (comment as ReplyType).answer;
+
+    return (
+      <View style={containerStyle}>
         <Image
-          style={{ width: 50, height: 50, borderRadius: 100 }}
+          style={styles.avatar}
           source={{
             uri:
-              item.user?.avatar?.url ||
+              comment.user?.avatar?.url ||
               "https://res.cloudinary.com/dshp9jnuy/image/upload/v1665822253/avatars/nrxsg8sd9iy10bbsoenn.png",
           }}
         />
-        <View style={{ marginHorizontal: 8, flex: 1 }}>
-          <View style={{ flex: 1, justifyContent: "space-around" }}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-              }}
-            >
-              <View>
-                <Text style={{ fontSize: 18, fontFamily: "Raleway_700Bold" }}>
-                  {item.user.name}
-                </Text>
-                <Text
-                  style={{
-                    fontSize: 16,
-                    paddingVertical: 5,
-                    paddingHorizontal: 3,
-                  }}
-                >
-                  {item.question}
-                </Text>
-              </View>
-            </View>
-          </View>
+        <View style={styles.commentContent}>
+          <Text style={styles.userName}>
+            {comment.user.name}
+            {isReply && <Text style={styles.replyBadge}> (Reply)</Text>}
+          </Text>
+          <Text style={styles.commentText}>
+            {textContent}
+          </Text>
         </View>
       </View>
-      {item?.questionReplies.length === 0 ? (
-        <TouchableOpacity onPress={() => setOpen(!open)}>
-          <Text style={{ fontSize: 18, paddingLeft: 15, paddingBottom: 10 }}>
-            Add Reply
-          </Text>
-        </TouchableOpacity>
-      ) : (
-        <View>
+    );
+  };
+
+  return (
+    <View style={styles.mainCard}>
+      {/* 1. CÂU HỎI CHÍNH */}
+      {renderComment(item)}
+
+      {/* 2. NÚT HIỂN THỊ/ẨN TRẢ LỜI & THÊM TRẢ LỜI */}
+      <View style={styles.actionsRow}>
+        {item?.questionReplies.length > 0 ? (
           <TouchableOpacity onPress={() => setshowReplies(!showReplies)}>
-            <Text style={{ fontSize: 18, paddingLeft: 15, paddingBottom: 10 }}>
-              {!showReplies ? "Show" : "Hide"} Replies
+            <Text style={styles.actionText}>
+              {showReplies ? "Hide" : "Show"} {item?.questionReplies.length}{" "}
+              {item?.questionReplies.length > 1 ? "Replies" : "Reply"}
             </Text>
           </TouchableOpacity>
-          {showReplies && (
-            <>
-              {item?.questionReplies?.map((reply: any, index: number) => (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    paddingVertical: 10,
-                    paddingHorizontal: 20,
-                  }}
-                  key={index}
-                >
-                  <Image
-                    style={{ width: 50, height: 50, borderRadius: 100 }}
-                    source={{
-                      uri:
-                        reply.user?.avatar?.url ||
-                        "https://res.cloudinary.com/dshp9jnuy/image/upload/v1665822253/avatars/nrxsg8sd9iy10bbsoenn.png",
-                    }}
-                  />
-                  <View style={{ marginHorizontal: 8, flex: 1 }}>
-                    <View style={{ flex: 1, justifyContent: "space-around" }}>
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                        }}
-                      >
-                        <View>
-                          <Text
-                            style={{
-                              fontSize: 18,
-                              fontFamily: "Raleway_700Bold",
-                            }}
-                          >
-                            {reply.user.name}
-                          </Text>
-                          <Text
-                            style={{
-                              fontSize: 16,
-                              paddingVertical: 5,
-                              paddingHorizontal: 3,
-                            }}
-                          >
-                            {reply?.answer}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              ))}
-              <TouchableOpacity onPress={() => setOpen(!open)}>
-                <Text
-                  style={{ fontSize: 18, paddingLeft: 15, paddingBottom: 10 }}
-                >
-                  Add Reply
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
+        ) : (
+          <Text style={styles.noReplyText}>No replies yet.</Text>
+        )}
+
+        <TouchableOpacity
+          onPress={() => setOpen(!open)}
+          style={{ marginLeft: item?.questionReplies.length > 0 ? 20 : 0 }}
+        >
+          <Text style={styles.actionText}>Add Reply</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* 3. HIỂN THỊ TRẢ LỜI */}
+      {showReplies && (
+        <View style={styles.repliesSection}>
+          {item?.questionReplies?.map((reply: ReplyType, index: number) => (
+            <View key={index} style={styles.replyWrapper}>
+              {renderComment(reply, true)}
+            </View>
+          ))}
         </View>
       )}
 
-      <Modal animationType="slide" visible={open}>
-        <View
-          style={{
-            flex: 1,
-            justifyContent: "center",
-            paddingHorizontal: 15,
-            backgroundColor: "#9BA8B2",
-          }}
-        >
-          <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
-            <TouchableOpacity onPress={() => setOpen(!open)}>
-              <Ionicons name="close-outline" size={25} />
-            </TouchableOpacity>
-          </View>
-          <TextInput
-            value={reply}
-            onChangeText={setReply}
-            placeholder="Add your reply..."
-            style={{
-              marginVertical: 20,
-              textAlignVertical: "top",
-              justifyContent: "flex-start",
-              backgroundColor: "#fff",
-              borderRadius: 10,
-              height: 100,
-              padding: 10,
-            }}
-            multiline={true}
-          />
-          <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+      {/* 4. MODAL TRẢ LỜI */}
+      <Modal animationType="fade" transparent={true} visible={open}>
+        <View style={styles.modalBackground}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Reply to {item.user.name}</Text>
+              <TouchableOpacity onPress={() => setOpen(false)}>
+                <Ionicons name="close-outline" size={28} color="#4B5563" />
+              </TouchableOpacity>
+            </View>
+
+            <TextInput
+              value={reply}
+              onChangeText={setReply}
+              placeholder="Type your reply here..."
+              placeholderTextColor="#9CA3AF"
+              style={styles.replyInput}
+              multiline={true}
+            />
+
             <TouchableOpacity
-              style={[styles.button]}
-              disabled={reply === ""}
-              onPress={() => handleReplySubmit()}
+              style={[styles.submitButton, reply.trim() === "" && styles.disabledButton]}
+              disabled={reply.trim() === "" || isSubmitting}
+              onPress={handleReplySubmit}
             >
-              <Text style={{ color: "#fff", fontSize: 18, fontWeight: "600" }}>
-                Submit
+              <Text style={styles.submitButtonText}>
+                {isSubmitting ? "Submitting..." : "Submit"}
               </Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
-    </>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  button: {
-    width: widthPercentageToDP("35%"),
-    height: 40,
-    backgroundColor: "#2467EC",
-    marginVertical: 10,
-    borderRadius: 40,
+  mainCard: {
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB", // Màu xám nhẹ cho đường kẻ
+    paddingHorizontal: 16,
+    backgroundColor: "#FFFFFF",
+  },
+
+  // --- COMMENT STRUCTURE ---
+  commentContainer: {
+    flexDirection: "row",
+    marginBottom: 10,
+    alignItems: "flex-start",
+  },
+  replyContainer: {
+    flexDirection: "row",
+    paddingVertical: 8,
+    alignItems: "flex-start",
+  },
+  commentContent: {
+    flex: 1,
+    marginLeft: 10,
+  },
+  avatar: {
+    width: 45,
+    height: 45,
+    borderRadius: 25,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+
+  // --- TYPOGRAPHY ---
+  userName: {
+    fontSize: 16,
+    fontFamily: "Raleway_700Bold",
+    color: "#1F2937",
+  },
+  commentText: {
+    fontSize: 15,
+    fontFamily: "Nunito_400Regular",
+    color: "#4B5563",
+    marginTop: 4,
+    lineHeight: 22,
+  },
+  replyBadge: {
+    fontSize: 12,
+    fontFamily: "Nunito_400Regular",
+    color: "#6B7280",
+    marginLeft: 5,
+  },
+
+  // --- ACTIONS ---
+  actionsRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginLeft: 55, // Căn chỉnh dưới avatar
+    marginBottom: 10,
+  },
+  actionText: {
+    fontSize: 14,
+    fontFamily: "Nunito_600SemiBold",
+    color: "#2563EB", // Màu xanh dương nổi bật
+  },
+  noReplyText: {
+    fontSize: 14,
+    fontFamily: "Nunito_400Regular",
+    color: "#9CA3AF",
+    marginRight: 20,
+  },
+
+  // --- REPLIES SECTION ---
+  repliesSection: {
+    paddingLeft: 30, // Thụt vào một chút để phân biệt
+    borderLeftWidth: 2,
+    borderLeftColor: "#F3F4F6", // Đường kẻ dọc mờ
+    marginVertical: 5,
+    marginLeft: 45, // Căn chỉnh dưới avatar
+  },
+  replyWrapper: {
+    paddingLeft: 10, // Thụt đầu dòng trả lời
+  },
+
+  // --- MODAL STYLES ---
+  modalBackground: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)", // Nền tối mờ
+  },
+  modalContent: {
+    width: wp("90%"),
+    backgroundColor: "#FFFFFF",
+    borderRadius: 12,
+    padding: 20,
+    elevation: 20,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 15,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: "Raleway_700Bold",
+    color: "#1F2937",
+  },
+  replyInput: {
+    minHeight: 120,
+    backgroundColor: "#F9FAFB",
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 15,
+    color: "#1F2937",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    textAlignVertical: "top",
+    marginBottom: 15,
+
+  },
+  submitButton: {
+    width: wp("35%"),
+    height: 45,
+    backgroundColor: "#2563EB",
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "flex-end",
+  },
+  disabledButton: {
+    backgroundColor: "#9CA3AF",
+  },
+  submitButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontFamily: "Nunito_700Bold",
   },
 });

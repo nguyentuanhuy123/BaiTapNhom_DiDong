@@ -58,7 +58,47 @@ export const createMobileOrder = CatchAsyncError(
   }
 );
 
+export const getUserOrders = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      // 1. Lấy userId từ req.user (Giả định bạn đã có middleware xác thực người dùng)
+      // Trong môi trường của bạn (nếu không dùng req.user), bạn cần gửi userId qua params hoặc body.
+      // Dựa trên mobile app, có thể lấy qua req.params.userId
+      const { userId } = req.params; 
 
+      if (!userId) {
+        return next(new ErrorHandler("User ID is missing from request parameters", 400));
+      }
+      
+      // 2. Tìm kiếm tất cả đơn hàng của người dùng
+      // Sử dụng populate để lấy thông tin chi tiết của Khóa học (Course)
+      const orders: IOrder[] = await OrderModel.find({ userId })
+        .populate({
+          path: 'courseId', // Trường trong OrderModel là ID của Course
+          select: 'name price estimatedPrice thumbnail', // Chỉ lấy các trường cần thiết để hiển thị
+          model: CourseModel,
+        })
+        .sort({ createdAt: -1 }); // Sắp xếp theo ngày tạo mới nhất
+
+      if (!orders || orders.length === 0) {
+        return res.status(200).json({
+          success: true,
+          message: "No orders found for this user.",
+          orders: [],
+        });
+      }
+
+      // 3. Trả về danh sách đơn hàng
+      res.status(200).json({
+        success: true,
+        orders,
+      });
+
+    } catch (error: any) {
+      return next(new ErrorHandler(error.message, 500));
+    }
+  }
+);
 //  send stripe publishble key
 export const sendStripePublishableKey = CatchAsyncError(
   async (req: Request, res: Response) => {

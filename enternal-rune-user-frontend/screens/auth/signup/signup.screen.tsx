@@ -265,12 +265,6 @@ export default function SignUpScreen() {
                 gap: 10,
               }}
             >
-              <TouchableOpacity>
-                <FontAwesome name="google" size={30} />
-              </TouchableOpacity>
-              <TouchableOpacity>
-                <FontAwesome name="github" size={30} />
-              </TouchableOpacity>
             </View>
 
             <View style={styles.signupRedirect}>

@@ -3,6 +3,8 @@ import { KeyboardAvoidingView, Platform, Keyboard } from "react-native";
 import { ToastProvider } from "react-native-toast-notifications";
 import { Stack } from "expo-router";
 
+import * as WebBrowser from "expo-web-browser";
+WebBrowser.maybeCompleteAuthSession();
 function RootLayoutNav() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
 
@@ -25,7 +27,7 @@ function RootLayoutNav() {
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
-        enabled={keyboardVisible} // 👉 chỉ bật khi bàn phím mở
+        enabled={keyboardVisible} 
       >
         <Stack screenOptions={{ headerShown: false }}>
           <Stack.Screen name="index" />

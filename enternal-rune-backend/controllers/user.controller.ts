@@ -138,7 +138,7 @@ interface IUpdatePassword {
 
 export const updatePassword = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
-    const { userId, oldPassword, newPassword } = req.body as IUpdatePassword;
+    const { userId, oldPassword, newPassword } = req.body;
 
     if (!oldPassword || !newPassword) {
       return next(new ErrorHandler("Please enter old and new password", 400));
@@ -152,13 +152,25 @@ export const updatePassword = CatchAsyncError(
       return next(new ErrorHandler("Invalid old password", 400));
     }
 
+    // Cập nhật mật khẩu + hash tự động
     user.password = newPassword;
     await user.save();
+
+    // Cập nhật Redis
     await redis.set(userId, JSON.stringify(user));
 
-    res.status(201).json({ success: true, user });
+    // Tạo token mới
+    const token = user.getJwtToken();
+
+    res.status(201).json({
+      success: true,
+      message: "Password updated successfully!",
+      token,
+      user,
+    });
   }
 );
+
 
 interface IUpdateProfilePicture {
   userId: string;
@@ -208,6 +220,45 @@ export const updateProfilePicture = CatchAsyncError(
       console.error("Error in updateProfilePicture:", err);
       next(err);
     }
+  }
+);
+
+export const checkEmailExists = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { email } = req.body;
+    if (!email) return next(new ErrorHandler("Email is required", 400));
+
+    const user = await userModel.findOne({ email });
+    if (!user) return next(new ErrorHandler("Email not found", 404));
+
+    res.status(200).json({
+      success: true,
+      message: "Email exists",
+      userId: user._id, // trả về để frontend chuyển sang reset password
+    });
+  }
+);
+interface IUpdatePassword {
+  userId: string;
+  newPassword: string;
+}
+export const resetPassword = CatchAsyncError(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const { userId, newPassword } = req.body;
+
+    if (!userId || !newPassword)
+      return next(new ErrorHandler("UserId and newPassword are required", 400));
+
+    const user = await userModel.findById(userId).select("+password");
+    if (!user) return next(new ErrorHandler("User not found", 404));
+
+    user.password = newPassword; // hash tự động khi save
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully!",
+    });
   }
 );
 
