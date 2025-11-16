@@ -5,6 +5,7 @@ import Header from "@/components/header/header";
 import SearchInput from "@/components/common/search.input";
 import HomeBannerSlider from "@/components/home/home.banner.slider";
 import AllCourses from "@/components/courses/all.courses";
+import BlogList from "@/components/blog/blog.list";
 
 export default function HomeScreen() {
   return (
@@ -34,6 +35,8 @@ export default function HomeScreen() {
             <HomeBannerSlider />
           </View>
           <AllCourses />
+          {/* Hiển thị blog dưới Popular course */}
+          <BlogList />
         </ScrollView>
       </SafeAreaView>
     </LinearGradient>

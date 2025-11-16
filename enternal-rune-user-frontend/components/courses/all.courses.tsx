@@ -175,7 +175,7 @@ export default function AllCourses() {
       <FlatList
         ref={flatListRef}
         scrollEnabled={false}
-        data={courses}
+        data={courses.slice(0, 4)}
         numColumns={2}
         columnWrapperStyle={listStyles.columnWrapper}
         showsVerticalScrollIndicator={false}
