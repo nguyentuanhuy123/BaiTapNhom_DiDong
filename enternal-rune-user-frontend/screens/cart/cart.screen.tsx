@@ -26,7 +26,6 @@ import {
 } from "@expo-google-fonts/nunito";
 import { Raleway_700Bold, Raleway_600SemiBold } from "@expo-google-fonts/raleway";
 
-// ✅ Import SQLite functions
 import {
     getCart,
     removeFromCart,
@@ -221,7 +220,7 @@ export default function CartScreen() {
                         <Text style={styles.successSubtitle}>Thank you for your purchase!</Text>
                         <TouchableOpacity
                             style={styles.goHomeButton}
-                            onPress={() => router.replace("/(tabs)/home")}
+                            onPress={() => router.push("/(tabs)")}
                         >
                             <Text style={styles.goHomeText}>Go to Home</Text>
                         </TouchableOpacity>

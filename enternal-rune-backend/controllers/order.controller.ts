@@ -15,48 +15,54 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
 export const createMobileOrder = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { courseId, userId, payment_info } = req.body;
-      if (!userId) {
-        return next(new ErrorHandler("User ID is required", 400));
-      }
+      const { courseId, userId, payment_info } = req.body; // courseId là mảng
+      if (!userId) return next(new ErrorHandler("User ID is required", 400));
       const user = await userModel.findById(userId);
       if (!user) return next(new ErrorHandler("User not found", 404));
-      const courseExistInUser = user.courses.some(
-        (course: any) => course._id.toString() === courseId
-      );
-      if (courseExistInUser) {
-        return next(
-          new ErrorHandler("You have already purchased this course", 400)
+
+      const ordersCreated = [];
+
+      for (const id of courseId) {
+        const courseExistInUser = user.courses.some(
+          (course: any) => course._id.toString() === id
         );
+        if (courseExistInUser) continue;
+
+        const course: ICourse | null = await CourseModel.findById(id);
+        if (!course) continue;
+
+        const order = await OrderModel.create({
+          courseId: course._id.toString(),
+          userId: user._id.toString(),
+          payment_info,
+        });
+        ordersCreated.push(order);
+
+        user.courses.push(course._id);
+        course.purchased = (course.purchased || 0) + 1;
+        await course.save();
+
+        await NotificationModel.create({
+          title: "New Order",
+          message: `You have successfully purchased the course: ${course.name}`,
+          status: "unread",
+          userId: user._id.toString(),
+        });
       }
-      const course: ICourse | null = await CourseModel.findById(courseId);
-      if (!course) return next(new ErrorHandler("Course not found", 404));
-      const order = await OrderModel.create({
-        courseId: course._id.toString(),
-        userId: user._id.toString(),
-        payment_info,
-      });
-      user.courses.push(course._id);
+
       await user.save();
 
-      course.purchased = (course.purchased || 0) + 1;
-      await course.save();
-      await NotificationModel.create({
-        title: "New Order",
-        message: `You have successfully purchased the course: ${course.name}`,
-        status: "unread",
-        userId: user._id.toString(),
-      });
       res.status(201).json({
         success: true,
-        message: "Order created successfully",
-        order,
+        message: "Orders created successfully",
+        orders: ordersCreated,
       });
     } catch (error: any) {
       return next(new ErrorHandler(error.message, 500));
     }
   }
 );
+
 
 export const getUserOrders = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
