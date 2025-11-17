@@ -31,7 +31,7 @@ export default function CourseCard({ item }: { item: CourseItemType }) {
 
   if (!fontsLoaded && !fontError) return null;
 
-  const ratingValue = parseFloat(item?.ratings?.toFixed(1) || 0);
+  const ratingValue = parseFloat(item?.ratings?.toFixed(1) || "0");
   const lessonCount = item.courseData.length;
 
   const scale = new Animated.Value(1);

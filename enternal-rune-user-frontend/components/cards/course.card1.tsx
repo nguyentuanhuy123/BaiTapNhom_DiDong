@@ -47,27 +47,24 @@ export default function CourseCard({ item }: { item: CoursesType & { progress?: 
           style={{
             flexDirection: "row",
             alignItems: "center",
-            justifyContent: "space-between",
+            width: 60,
+            justifyContent: "center",
+            backgroundColor: "#141517",
+            padding: 4,
+            borderRadius: 5,
+            gap: 4,
+            paddingHorizontal: 10,
+            height: 28,
+            marginTop: 10,
           }}
         >
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              backgroundColor: "#141517",
-              padding: 4,
-              borderRadius: 5,
-              gap: 4,
-              paddingHorizontal: 10,
-              height: 28,
-              marginTop: 10,
-            }}
-          >
-            <FontAwesome name="star" size={14} color={"#ffb800"} />
-            <Text style={[styles.ratingText]}>{item?.ratings}</Text>
-          </View>
-          <Text>{item.purchased} Students</Text>
+          <FontAwesome name="star" size={14} color={"#ffb800"} />
+          <Text style={[styles.ratingText]}>
+            {(Number(item?.ratings)?.toFixed(1)) ?? "0.0"}
+          </Text>
+
         </View>
+
 
         {/* Price + Lectures */}
         <View

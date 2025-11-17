@@ -219,7 +219,7 @@ export const addAnwser = CatchAsyncError(
 interface IAddReviewData {
   review: string;
   rating: number;
-  userName?: string; // thêm nếu muốn
+  // userName?: string; // thêm nếu muốn
 }
 
 export const addReview = CatchAsyncError(
@@ -227,25 +227,27 @@ export const addReview = CatchAsyncError(
     try {
       const courseId = req.params.id;
       const course = await CourseModel.findById(courseId);
+      if (!course) return next(new ErrorHandler("Course not found", 404));
 
-      if (!course) {
-        return next(new ErrorHandler("Course not found", 404));
-      }
-
-      const { review, rating, userName } = req.body as IAddReviewData;
+      const { review, rating } = req.body as IAddReviewData;
 
       const reviewData: any = {
-        user: userName || "Guest",
+        user: req.user ? { _id: req.user._id, name: req.user.name, email: req.user.email } : "Guest",
         rating,
         comment: review,
+        commentReplies: [],
+        createdAt: new Date().toISOString(),
       };
 
       course.reviews.push(reviewData);
-      let avg = 0;
-      course.reviews.forEach((rev: any) => (avg += rev.rating));
+
+      // Tính rating trung bình
+      const avg = course.reviews.reduce((sum, r: any) => sum + r.rating, 0);
       course.ratings = avg / course.reviews.length;
 
       await course.save();
+
+      await redis.set(courseId, JSON.stringify(course), "EX", 604800); // cache 7 ngày
 
       res.status(200).json({ success: true, course });
     } catch (error: any) {
@@ -253,51 +255,86 @@ export const addReview = CatchAsyncError(
     }
   }
 );
-interface IAddReviewData {
+// interface IAddReviewData {
+//   comment: string;
+//   courseId: string;
+//   reviewId: string;
+// }
+// export const addReplyToReview = CatchAsyncError(
+//   async (req: Request, res: Response, next: NextFunction) => {
+//     try {
+//       const { comment, courseId, reviewId } = req.body as IAddReviewData;
+
+//       const course = await CourseModel.findById(courseId);
+
+//       if (!course) {
+//         return next(new ErrorHandler("Course not found", 404));
+//       }
+
+//       const review = course?.reviews?.find(
+//         (rev: any) => rev._id.toString() === reviewId
+//       );
+
+//       if (!review) {
+//         return next(new ErrorHandler("Review not found", 404));
+//       }
+
+//       const replyData: any = {
+//         user: req.user,
+//         comment,
+//         createdAt: new Date().toISOString(),
+//         updatedAt: new Date().toISOString(),
+//       };
+
+//       if (!review.commentReplies) {
+//         review.commentReplies = [];
+//       }
+
+//       review.commentReplies?.push(replyData);
+      
+//       await course?.save();
+
+//       await redis.set(courseId, JSON.stringify(course), "EX", 604800); // 7days
+
+//       res.status(200).json({
+//         success: true,
+//         course,
+//       });
+//     } catch (error: any) {
+//       return next(new ErrorHandler(error.message, 500));
+//     }
+//   }
+// );
+interface IAddReviewReplyData {
   comment: string;
   courseId: string;
   reviewId: string;
 }
+
 export const addReplyToReview = CatchAsyncError(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { comment, courseId, reviewId } = req.body as IAddReviewData;
+      const { comment, courseId, reviewId } = req.body as IAddReviewReplyData;
 
       const course = await CourseModel.findById(courseId);
+      if (!course) return next(new ErrorHandler("Course not found", 404));
 
-      if (!course) {
-        return next(new ErrorHandler("Course not found", 404));
-      }
-
-      const review = course?.reviews?.find(
-        (rev: any) => rev._id.toString() === reviewId
-      );
-
-      if (!review) {
-        return next(new ErrorHandler("Review not found", 404));
-      }
+      const review = course.reviews.find((r: any) => r._id.toString() === reviewId);
+      if (!review) return next(new ErrorHandler("Review not found", 404));
 
       const replyData: any = {
-        user: req.user,
+        user: req.user ? { _id: req.user._id, name: req.user.name } : "Guest",
         comment,
         createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
       };
 
-      if (!review.commentReplies) {
-        review.commentReplies = [];
-      }
+      if (!review.commentReplies) review.commentReplies = [];
+      review.commentReplies.push(replyData);
 
-      review.commentReplies?.push(replyData);
-      
-      await course?.save();
+      await course.save();
+      await redis.set(courseId, JSON.stringify(course), "EX", 604800);
 
-      await redis.set(courseId, JSON.stringify(course), "EX", 604800); // 7days
-
-      res.status(200).json({
-        success: true,
-        course,
-      });
+      res.status(200).json({ success: true, course });
     } catch (error: any) {
       return next(new ErrorHandler(error.message, 500));
     }
